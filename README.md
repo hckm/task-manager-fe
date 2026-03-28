@@ -68,5 +68,6 @@ Contudo, o **TaskFlow** está sendo desenvolvido como uma solução moderna para
 - Lucas Willians Barbosa Caraça
 - Luiz Gustavo da Graça
 - Alisson Silva Raymundo
-- Heron Carlos Kuerche Meneses
+- Heron Carlos Kuerche de Meneses
 - Wender Toledo
+- Nicolas Barros

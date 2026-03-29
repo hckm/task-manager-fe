@@ -1,0 +1,87 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --color-primary: #f8f9fc;
+  --color-filter0: #0d63fd;
+  --color-filter1: #6c757d;
+  --color-filter2: #f6c23e;
+  --color-filter3: #1cc88a;
+
+  --transicao: all 0.3s ease;
+}
+
+body {
+  background-color: var(--color-primary);
+  font-family: "Segoe UI", sans-serif;
+}
+
+.dashboard-card {
+  border: none;
+  transition: var(--transicao);
+}
+
+.dashboard-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+/* Cor de fundo das tarefas */
+.task-card {
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  transition: var(--transicao);
+  border-left: 5px solid transparent;
+}
+
+/* Cor da borda dos filtros (status) */
+.border-total {
+  border-left: 5px solid var(--color-filter0) !important;
+}
+.border-fazer {
+  border-left: 5px solid var(--color-filter1) !important;
+}
+.border-andamento {
+  border-left: 5px solid var(--color-filter2) !important;
+}
+.border-concluida {
+  border-left: 5px solid var(--color-filter3) !important;
+}
+
+.task-afazer {
+  background-color: #f8f9fa;
+  border-left: 5px solid var(--color-filter1);
+}
+.task-andamento {
+  background-color: #fff3cd;
+  border-left: 5px solid var(--color-filter2);
+}
+.task-concluida {
+  background-color: #f1fcf7;
+  border-left: 5px solid var(--color-filter3);
+}
+
+.progress {
+  height: 12px;
+  border-radius: 10px;
+  background: #eaecf4;
+}
+
+/* Animação do botão e cards */
+
+.btn-animation,
+.card-animation {
+  transition: var(--transicao);
+}
+
+.btn-animation:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.card-animation:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1) !important;
+}

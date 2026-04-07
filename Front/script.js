@@ -63,7 +63,7 @@ class TaskFlowGerenciador {
 // HTML e CSS interligado ao JS
 const app = new TaskFlowGerenciador();
 // const API_BASE_URL = "http://localhost:8080";
-const API_BASE_URL = "http://task-manager-api-g9-cef2b0a6ceg6b8dr.brazilsouth-01.azurewebsites.net"
+const API_BASE_URL = "https://task-manager-api-g9-cef2b0a6ceg6b8dr.brazilsouth-01.azurewebsites.net"
 const TAREFAS_ENDPOINT = `${API_BASE_URL}/api/tarefas`;
 const RESPONSAVEIS_ENDPOINT = `${API_BASE_URL}/api/responsaveis`;
 const STATUS_INICIAL_API = "AFAZER";

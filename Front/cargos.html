@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cargos — TaskFlow</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="libs/bootstrap-icons/bootstrap-icons.min.css" />
+    <style>
+      body { background: #f0f2f5; }
+      .popup-header {
+        background: #fff;
+        border-bottom: 1px solid #dee2e6;
+        padding: 1rem 1.5rem;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+      .popup-body { padding: 1.25rem 1.5rem; }
+      .table th {
+        font-size: 0.8rem;
+        color: #6c757d;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .edit-input {
+        border: none;
+        background: transparent;
+        padding: 0;
+        font-weight: 600;
+        width: 100%;
+      }
+      .edit-input:focus {
+        outline: none;
+        background: #f8f9fa;
+        border-bottom: 2px solid #0d6efd;
+        border-radius: 0;
+        padding: 2px 4px;
+      }
+    </style>
+  </head>
+  <body>
+
+    <!-- Header -->
+    <div class="popup-header d-flex align-items-center justify-content-between">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-briefcase-fill text-primary fs-5"></i>
+        <div>
+          <h5 class="mb-0 fw-bold">Cargos</h5>
+          <small class="text-muted">Gerencie os cargos disponíveis</small>
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" onclick="voltarParaResponsaveis()" title="Voltar">
+          <i class="bi bi-arrow-left me-1"></i>Voltar
+        </button>
+      </div>
+    </div>
+
+    <div class="popup-body">
+
+      <!-- Formulário de cadastro -->
+      <div class="card shadow-sm mb-4 p-3">
+        <h6 class="fw-bold mb-3">
+          <i class="bi bi-plus-circle me-1 text-primary"></i>Novo Cargo
+        </h6>
+        <form id="formCargo">
+          <div class="row g-2 align-items-end">
+            <div class="col-12 col-sm-9">
+              <label class="form-label small mb-1">Descrição do cargo</label>
+              <input
+                type="text"
+                id="inp-descricao"
+                class="form-control form-control-sm"
+                placeholder="Ex: Desenvolvedor"
+                required
+              />
+            </div>
+            <div class="col-12 col-sm-3">
+              <button type="submit" id="btn-cadastrar" class="btn btn-primary btn-sm w-100">
+                <i class="bi bi-plus-lg me-1"></i>Adicionar
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Lista de cargos -->
+      <div id="listaCargos">
+        <div class="text-center text-muted py-5">
+          <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+          Carregando cargos...
+        </div>
+      </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      const API_BASE_URL   = "http://localhost:8080";
+      const CARGOS_ENDPOINT = `${API_BASE_URL}/api/cargos`;
+
+      // ── Listar ────────────────────────────────────────────────
+      async function carregarCargos() {
+        const div = document.getElementById("listaCargos");
+        div.innerHTML = `<div class="text-center text-muted py-5">
+          <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+          Carregando...</div>`;
+        try {
+          const res = await fetch(CARGOS_ENDPOINT);
+          if (!res.ok) throw new Error(`Erro ${res.status}`);
+          const data = await res.json();
+          const lista = Array.isArray(data?.content) ? data.content
+                      : Array.isArray(data) ? data : [];
+
+          if (lista.length === 0) {
+            div.innerHTML = `<div class="text-center text-muted py-5">
+              <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+              Nenhum cargo cadastrado.</div>`;
+            return;
+          }
+
+          div.innerHTML = `
+            <div class="card shadow-sm">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width:60px">#</th>
+                    <th>Descrição</th>
+                    <th class="text-end" style="width:110px">Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-cargos"></tbody>
+              </table>
+            </div>`;
+
+          const tbody = document.getElementById("tbody-cargos");
+          lista.forEach(item => {
+            const tr = document.createElement("tr");
+            tr.id = `row-cargo-${item.id}`;
+            tr.innerHTML = `
+              <td class="text-muted small">${item.id}</td>
+              <td>
+                <input
+                  id="edit-cargo-${item.id}"
+                  class="edit-input"
+                  value="${item.descricao ?? ""}"
+                  aria-label="Descrição do cargo"
+                  onkeydown="handleEditKeydown(event, ${item.id})"
+                />
+              </td>
+              <td class="text-end">
+                <button
+                  class="btn btn-sm btn-outline-primary me-1"
+                  onclick="salvarCargo(${item.id}, this)"
+                  title="Salvar alteração"
+                >
+                  <i class="bi bi-floppy"></i>
+                </button>
+                <button
+                  class="btn btn-sm btn-outline-danger"
+                  onclick="excluirCargo(${item.id}, this)"
+                  title="Excluir cargo"
+                >
+                  <i class="bi bi-trash"></i>
+                </button>
+              </td>`;
+            tbody.appendChild(tr);
+          });
+        } catch (err) {
+          div.innerHTML = `<div class="alert alert-warning m-0">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>${err.message}</div>`;
+        }
+      }
+
+      // ── Criar ─────────────────────────────────────────────────
+      document.getElementById("formCargo").addEventListener("submit", async function (e) {
+        e.preventDefault();
+        const descricao = document.getElementById("inp-descricao").value.trim();
+        const btn       = document.getElementById("btn-cadastrar");
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+        try {
+          const res = await fetch(CARGOS_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ descricao }),
+          });
+          if (!res.ok) {
+            const txt = await res.text();
+            throw new Error(txt || `Erro ${res.status}`);
+          }
+          this.reset();
+          await carregarCargos();
+          // Atualiza o select de cargos no frame pai (responsaveis.html)
+          window.parent?.carregarCargosNoSelect?.();
+        } catch (err) {
+          alert(`Erro ao criar cargo: ${err.message}`);
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="bi bi-plus-lg me-1"></i>Adicionar';
+        }
+      });
+
+      // ── Atualizar (PUT /api/cargos — id no body) ─────────────
+      async function salvarCargo(id, btn) {
+        const input     = document.getElementById(`edit-cargo-${id}`);
+        const descricao = input?.value.trim();
+        if (!descricao) { alert("A descrição não pode ser vazia."); return; }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+        try {
+          const res = await fetch(CARGOS_ENDPOINT, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, descricao }),
+          });
+          if (!res.ok) {
+            const txt = await res.text();
+            throw new Error(txt || `Erro ${res.status}`);
+          }
+          // Feedback visual
+          btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+          btn.classList.replace("btn-outline-primary", "btn-success");
+          setTimeout(() => {
+            btn.innerHTML = '<i class="bi bi-floppy"></i>';
+            btn.classList.replace("btn-success", "btn-outline-primary");
+            btn.disabled = false;
+          }, 1500);
+          window.parent?.carregarCargosNoSelect?.();
+        } catch (err) {
+          alert(`Erro ao atualizar cargo: ${err.message}`);
+          btn.disabled = false;
+          btn.innerHTML = '<i class="bi bi-floppy"></i>';
+        }
+      }
+
+      // ── Excluir ───────────────────────────────────────────────
+      async function excluirCargo(id, btn) {
+        if (!confirm("Excluir este cargo? Responsáveis vinculados podem ser afetados.")) return;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        try {
+          const res = await fetch(`${CARGOS_ENDPOINT}/${id}`, { method: "DELETE" });
+          if (!res.ok) throw new Error(`Erro ${res.status}`);
+          await carregarCargos();
+          window.parent?.carregarCargosNoSelect?.();
+        } catch (err) {
+          alert(`Erro ao excluir: ${err.message}`);
+          btn.disabled = false;
+          btn.innerHTML = '<i class="bi bi-trash"></i>';
+        }
+      }
+
+      // ── Enter no campo de edição aciona o salvar ──────────────
+      function handleEditKeydown(event, id) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          const btn = event.target.closest("tr")?.querySelector(".btn-outline-primary");
+          if (btn) salvarCargo(id, btn);
+        }
+      }
+
+      // ── Voltar para o iframe de responsáveis ──────────────────
+      function voltarParaResponsaveis() {
+        const iframe = window.parent?.document.getElementById("iframeResponsaveis");
+        if (iframe) iframe.src = "Front/responsaveis.html";
+      }
+
+      // ── Init ──────────────────────────────────────────────────
+      carregarCargos();
+    </script>
+  </body>
+</html>
+

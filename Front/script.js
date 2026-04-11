@@ -12,11 +12,12 @@ class Usuario {
 class Tarefa {
   #titulo;
   #status;
-  constructor(titulo, prioridade, responsavel, descricao = "", idBackend = null) {
+  constructor(titulo, prioridade, responsavel, descricao = "", prazo = "", idBackend = null) {
     this.#titulo = titulo;
     this.prioridade = prioridade;
     this.responsavel = responsavel;
     this.descricao = descricao;
+    this.prazo = prazo;
     this.idBackend = idBackend;
     this.#status = "A Fazer";
   }
@@ -40,7 +41,6 @@ class TaskFlowGerenciador {
     this.tarefas.push(tarefa);
   }
 
-  // Cálculo Adaptado do Lucas
   calcularProgresso() {
     const total = this.tarefas.length;
     let concluidas = 0;
@@ -55,77 +55,239 @@ class TaskFlowGerenciador {
     });
 
     const percentual = total === 0 ? 0 : Math.round((concluidas / total) * 100);
-
     return { total, concluidas, aFazer, andamento, percentual };
   }
 }
 
-// HTML e CSS interligado ao JS
+// ============================================================
+// Constantes
+// ============================================================
 const app = new TaskFlowGerenciador();
-// const API_BASE_URL = "http://localhost:8080";
-const API_BASE_URL = "https://task-manager-api-g9-cef2b0a6ceg6b8dr.brazilsouth-01.azurewebsites.net"
+const API_BASE_URL = "http://localhost:8080";
+// const API_BASE_URL = "https://task-manager-api-g9-cef2b0a6ceg6b8dr.brazilsouth-01.azurewebsites.net"
 const TAREFAS_ENDPOINT = `${API_BASE_URL}/api/tarefas`;
+const FILTRAR_ENDPOINT = `${API_BASE_URL}/api/tarefas/filtrar`;
 const RESPONSAVEIS_ENDPOINT = `${API_BASE_URL}/api/responsaveis`;
 const STATUS_INICIAL_API = "AFAZER";
+const TAREFAS_PAGE_SIZE = 100;
 
+// Mapa de normalização: valor da API → valor interno
+const STATUS_NORMALIZADO = {
+  AFAZER: "A Fazer",
+  A_FAZER: "A Fazer",
+  EMANDAMENTO: "Em Andamento",
+  EM_ANDAMENTO: "Em Andamento",
+  CONCLUIDO: "Concluido",
+  "CONCLU\u00cdDO": "Concluido",
+};
+
+// Mapa reverso: valor interno → nome exato do enum StatusAtividade no backend
+const STATUS_PARA_API = {
+  "A Fazer":      "AFAZER",
+  "Em Andamento": "EmAndamento",
+  "Concluido":    "Concluido",
+};
+
+// Mapa de exibição: enum Prioridade → label amigável
+const PRIORIDADE_LABEL = {
+  ALTA:  "Alta",
+  MEDIO: "Médio",
+  BAIXO: "Baixo",
+};
+
+// ============================================================
+// Helpers de data
+// ============================================================
+
+/** Retorna a data de hoje no formato ISO (yyyy-MM-dd) — valor do input[type=date] */
+function hojeISO() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/** Converte yyyy-MM-dd → dd/MM/yyyy (formato esperado pela API) */
+function isoParaAPI(isoDate) {
+  if (!isoDate) return "";
+  const [yyyy, mm, dd] = isoDate.split("-");
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+/** Converte dd/MM/yyyy → yyyy-MM-dd (para popular input[type=date]) */
+function apiParaISO(apiDate) {
+  if (!apiDate) return "";
+  const [dd, mm, yyyy] = apiDate.split("/");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/** Retorna a data de amanhã no formato ISO (yyyy-MM-dd) */
+function amanhaISO() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Inicializa os filtros de data:
+ *  - Data inicial = hoje (data corrente)
+ *  - Data final   = amanhã
+ */
+function inicializarFiltrosData() {
+  const inputInicial = document.getElementById("filtro-data-inicial");
+  const inputFinal = document.getElementById("filtro-data-final");
+  if (inputInicial) inputInicial.value = hojeISO();
+  if (inputFinal) inputFinal.value = amanhaISO();
+}
+
+// ============================================================
+// Erro de backend
+// ============================================================
 function montarErroBackend(rawBody, status) {
-  if (!rawBody) {
-    return `Falha ao criar tarefa (${status})`;
-  }
-
+  if (!rawBody) return `Falha ao criar tarefa (${status})`;
   try {
     const parsed = JSON.parse(rawBody);
     const primeiraNotificacao = parsed?.notifications?.[0]?.message;
     const traceId = parsed?.traceId;
-
-    if (primeiraNotificacao && traceId) {
-      return `${primeiraNotificacao} (traceId: ${traceId})`;
-    }
-
-    if (primeiraNotificacao) {
-      return primeiraNotificacao;
-    }
-
+    if (primeiraNotificacao && traceId) return `${primeiraNotificacao} (traceId: ${traceId})`;
+    if (primeiraNotificacao) return primeiraNotificacao;
     return rawBody;
   } catch {
     return rawBody;
   }
 }
 
-async function carregarResponsaveisNoSelect() {
-  const select = document.getElementById("responsavel");
+// ============================================================
+// Busca de tarefas no backend (filtro por data)
+// ============================================================
+async function buscarTarefasDoBackend() {
+  const dataInicial = document.getElementById("filtro-data-inicial")?.value || "";
+  const dataFinal = document.getElementById("filtro-data-final")?.value || "";
+
+  if (!dataInicial || !dataFinal) {
+    renderizarListaVazia("Selecione um período para buscar as tarefas.");
+    return;
+  }
+
+  // dataInicial e dataFinal já estão em yyyy-MM-dd (vêm de input[type=date])
+  const url =
+    `${FILTRAR_ENDPOINT}` +
+    `?dataInicio=${dataInicial}` +
+    `&dataFim=${dataFinal}` +
+    `&page=0&size=${TAREFAS_PAGE_SIZE}`;
+
+  mostrarCarregando();
 
   try {
-    const response = await fetch(RESPONSAVEIS_ENDPOINT);
+    const response = await fetch(url);
 
     if (!response.ok) {
-      throw new Error(`Falha ao buscar responsáveis (${response.status})`);
+      throw new Error(`Erro ao buscar tarefas (${response.status})`);
     }
+
+    const data = await response.json();
+    const pageData = data?.content;               // Page<TarefaResponseDTO>
+    const itens = Array.isArray(pageData?.content) // array real de tarefas
+      ? pageData.content
+      : [];
+
+    // Mapeia resposta da API para objetos Tarefa
+    app.tarefas = itens.map((item) => {
+    // Estrutura do backend: responsavel: { id, responsavel: "Nome", cargo: {...} }
+      const nomeResponsavel =
+        typeof item.responsavel === "string"
+          ? item.responsavel
+          : item.responsavel?.responsavel ?? item.responsavel?.nome ?? "—";
+
+      const usuario = new Usuario(nomeResponsavel);
+
+      const statusBruto = String(item.statusAtividade ?? "").toUpperCase();
+      const statusNorm = STATUS_NORMALIZADO[statusBruto] ?? "A Fazer";
+
+      // Backend retorna "dtCadastro" (ISO 8601). Usa como prazo de exibição
+      // enquanto o campo prazo não existir na resposta.
+      const prazoISO = item.prazo
+        ? item.prazo.substring(0, 10)          // se vier no futuro, já em ISO
+        : item.dtCadastro
+          ? item.dtCadastro.substring(0, 10)   // "2026-04-09T21:08:19..." → "2026-04-09"
+          : "";
+
+      const t = new Tarefa(
+        item.titulo ?? "Sem título",
+        item.prioridade ?? "—",
+        usuario,
+        item.descricao ?? "",
+        prazoISO,
+        item.id ?? null
+      );
+      t.setStatus(statusNorm);
+      return t;
+    });
+
+    atualizarUI();
+  } catch (error) {
+    console.error("Erro ao buscar tarefas:", error);
+    document.getElementById("listaTarefas").innerHTML = `
+      <div class="col-12">
+        <div class="alert alert-warning d-flex align-items-center gap-2">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          Não foi possível carregar as tarefas: ${error.message}
+        </div>
+      </div>`;
+  }
+}
+
+function mostrarCarregando() {
+  document.getElementById("listaTarefas").innerHTML = `
+    <div class="col-12 text-center text-muted py-5">
+      <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+      Buscando tarefas...
+    </div>`;
+}
+
+function renderizarListaVazia(msg = "Nenhuma tarefa encontrada.") {
+  document.getElementById("listaTarefas").innerHTML = `
+    <div class="col-12 text-center text-muted py-4">
+      <i class="bi bi-inbox fs-3 d-block mb-2"></i>${msg}
+    </div>`;
+}
+
+// ============================================================
+// Responsáveis
+// ============================================================
+async function carregarResponsaveisNoSelect() {
+  const select = document.getElementById("responsavel");
+  try {
+    const response = await fetch(RESPONSAVEIS_ENDPOINT);
+    if (!response.ok) throw new Error(`Falha ao buscar responsáveis (${response.status})`);
 
     const data = await response.json();
     const lista = Array.isArray(data?.content) ? data.content : [];
 
     select.innerHTML = '<option value="" disabled selected>Escolher</option>';
-
     lista.forEach((item) => {
       const option = document.createElement("option");
       option.value = String(item.id);
       option.textContent = item.responsavel;
       select.appendChild(option);
     });
+
+    atualizarFiltroResponsaveis();
   } catch (error) {
     console.error("Erro ao carregar responsáveis:", error);
-    select.innerHTML =
-      '<option value="" disabled selected>Não foi possível carregar</option>';
+    select.innerHTML = '<option value="" disabled selected>Não foi possível carregar</option>';
+    atualizarFiltroResponsaveis();
   }
 }
 
 async function criarTarefaNoBackend(payload) {
   const response = await fetch(TAREFAS_ENDPOINT, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 
@@ -138,6 +300,9 @@ async function criarTarefaNoBackend(payload) {
   return rawBody ? JSON.parse(rawBody) : null;
 }
 
+// ============================================================
+// Submit do formulário
+// ============================================================
 document.getElementById("taskForm").addEventListener("submit", async function (e) {
   e.preventDefault();
 
@@ -147,6 +312,7 @@ document.getElementById("taskForm").addEventListener("submit", async function (e
   const responsavelId = Number(respSelect.value);
   const responsavelNome = respSelect.options[respSelect.selectedIndex]?.text || "";
   const prio = document.getElementById("prioridade").value;
+  const prazo = document.getElementById("prazo").value;
   const statusAtividade = STATUS_INICIAL_API;
 
   if (!Number.isSafeInteger(responsavelId)) {
@@ -154,13 +320,7 @@ document.getElementById("taskForm").addEventListener("submit", async function (e
     return;
   }
 
-  const payload = {
-    titulo,
-    descricao,
-    responsavelId,
-    prioridade: prio,
-    statusAtividade,
-  };
+  const payload = { titulo, descricao, responsavelId, prioridade: prio, statusAtividade };
 
   const submitBtn = this.querySelector("button[type='submit']");
   submitBtn.disabled = true;
@@ -170,21 +330,17 @@ document.getElementById("taskForm").addEventListener("submit", async function (e
     const tarefaCriada = await criarTarefaNoBackend(payload);
 
     const usuario = new Usuario(responsavelNome);
-    const novaTarefa = new Tarefa(
-      titulo,
-      prio,
-      usuario,
-      descricao,
-      tarefaCriada?.id ?? null
-    );
+    const novaTarefa = new Tarefa(titulo, prio, usuario, descricao, prazo, tarefaCriada?.id ?? null);
 
     if (tarefaCriada?.statusAtividade) {
-      novaTarefa.setStatus(tarefaCriada.statusAtividade);
+      const statusNorm =
+        STATUS_NORMALIZADO[tarefaCriada.statusAtividade.toUpperCase()] ?? tarefaCriada.statusAtividade;
+      novaTarefa.setStatus(statusNorm);
     }
 
-    app.adicionarTarefa(novaTarefa);
     this.reset();
-    atualizarUI();
+    // Re-busca da API para incluir a nova tarefa na lista filtrada
+    await buscarTarefasDoBackend();
   } catch (error) {
     console.error("Erro ao criar tarefa:", error);
     alert(`Erro ao criar tarefa no backend: ${error.message}`);
@@ -194,56 +350,257 @@ document.getElementById("taskForm").addEventListener("submit", async function (e
   }
 });
 
+// ============================================================
+// UI — renderização (usa app.tarefas já carregadas da API)
+// ============================================================
 function atualizarUI() {
   const metricas = app.calcularProgresso();
+  atualizarFiltroResponsaveis();
 
-  // Cards
+  // Cards de métricas (totais globais)
   document.getElementById("totalTxt").innerText = metricas.total;
   document.getElementById("afazerTxt").innerText = metricas.aFazer;
   document.getElementById("andamentoTxt").innerText = metricas.andamento;
   document.getElementById("concluidasTxt").innerText = metricas.concluidas;
 
-  // Barra de progresso geral (atualizar)
-  document.getElementById("percentual-geral").innerText =
-    `${metricas.percentual}%`;
-  document.getElementById("progress-bar-geral").style.width =
-    `${metricas.percentual}%`;
+  // Barra de progresso
+  document.getElementById("percentual-geral").innerText = `${metricas.percentual}%`;
+  document.getElementById("progress-bar-geral").style.width = `${metricas.percentual}%`;
 
-  // Renderiza a lista de tarefas
+  // Filtra por responsável e status (client-side — data já veio filtrada da API)
+  const tarefasFiltradas = filtrarPorResponsavelEStatus();
+
   const lista = document.getElementById("listaTarefas");
   lista.innerHTML = "";
 
-  app.tarefas.forEach((t, i) => {
+  if (tarefasFiltradas.length === 0) {
+    renderizarListaVazia("Nenhuma tarefa encontrada para os filtros selecionados.");
+    return;
+  }
+
+  tarefasFiltradas.forEach(({ tarefa: t, indiceOriginal }) => {
     const status = t.getStatus();
 
-    // Cores do CSS interligada ao bloco de tarefas
     let classeCor = "";
     if (status === "A Fazer") classeCor = "task-afazer";
     else if (status === "Em Andamento") classeCor = "task-andamento";
     else if (status === "Concluido") classeCor = "task-concluida";
-    // Card da tarefa
+
+    const prazoFormatado = t.prazo
+      ? new Date(t.prazo + "T00:00:00").toLocaleDateString("pt-BR")
+      : "";
+
+    const prioLabel = PRIORIDADE_LABEL[t.prioridade?.toUpperCase()] ?? t.prioridade;
+
     lista.innerHTML += `
       <div class="col-12">
-          <div class="task-card card p-4 ${classeCor} shadow-sm">
-              <h5 class="fw-bold">${t.getTitulo()}</h5>
-              <small class="text-muted">Responsável: ${t.responsavel.getNome()} | Prioridade: ${t.prioridade}</small>
-              ${t.descricao ? `<p class="mb-0 mt-2 small text-secondary">${t.descricao}</p>` : ""}
-              
-              <div class="mt-3">
-                  <select class="form-select form-select-sm w-auto" onchange="mudarStatus(${i}, this.value)">
-                      <option value="A Fazer" ${status === "A Fazer" ? "selected" : ""}>A Fazer</option>
-                      <option value="Em Andamento" ${status === "Em Andamento" ? "selected" : ""}>Em Andamento</option>
-                      <option value="Concluido" ${status === "Concluido" ? "selected" : ""}>Concluído</option>
-                  </select>
-              </div>
+        <div class="task-card card p-4 ${classeCor} shadow-sm">
+          <h5 class="fw-bold">${t.getTitulo()}</h5>
+          <small class="text-muted">Responsável: ${t.responsavel.getNome()} | Prioridade: ${prioLabel}</small>
+          ${prazoFormatado ? `<small class="d-block text-muted">Prazo: ${prazoFormatado}</small>` : ""}
+          ${t.descricao ? `<p class="mb-0 mt-2 small text-secondary">${t.descricao}</p>` : ""}
+          <div class="mt-3 d-flex align-items-center gap-2">
+            <select class="form-select form-select-sm w-auto" onchange="mudarStatus(${indiceOriginal}, this.value)">
+              <option value="A Fazer" ${status === "A Fazer" ? "selected" : ""}>A Fazer</option>
+              <option value="Em Andamento" ${status === "Em Andamento" ? "selected" : ""}>Em Andamento</option>
+              <option value="Concluido" ${status === "Concluido" ? "selected" : ""}>Concluído</option>
+            </select>
+            <button
+              id="btn-salvar-${indiceOriginal}"
+              class="btn btn-sm btn-outline-primary"
+              onclick="salvarStatusNoBackend(${t.idBackend}, ${indiceOriginal})"
+              title="Salvar status"
+            >
+              <i class="bi bi-floppy"></i>
+            </button>
+            <button
+              id="btn-excluir-${indiceOriginal}"
+              class="btn btn-sm btn-outline-danger ms-auto"
+              onclick="excluirTarefa(${t.idBackend}, ${indiceOriginal})"
+              title="Excluir tarefa"
+            >
+              <i class="bi bi-trash"></i>
+            </button>
           </div>
+        </div>
       </div>`;
   });
 }
 
-window.mudarStatus = function (id, novoStatus) {
-  app.tarefas[id].setStatus(novoStatus);
+// ============================================================
+// Filtros client-side (responsável + status apenas)
+// Data já é filtrada pelo endpoint da API
+// ============================================================
+function filtrarPorResponsavelEStatus() {
+  const responsavel = document.getElementById("filtro-responsavel")?.value || "";
+  const status = document.getElementById("filtro-status")?.value || "";
+
+  return app.tarefas
+    .map((tarefa, indiceOriginal) => ({ tarefa, indiceOriginal }))
+    .filter(({ tarefa }) => {
+      if (responsavel && tarefa.responsavel.getNome() !== responsavel) return false;
+      if (status && tarefa.getStatus() !== status) return false;
+      return true;
+    });
+}
+
+function atualizarFiltroResponsaveis() {
+  const filtro = document.getElementById("filtro-responsavel");
+  const selectCadastro = document.getElementById("responsavel");
+  if (!filtro || !selectCadastro) return;
+
+  const valorAtual = filtro.value;
+  filtro.innerHTML = '<option value="">Todos os responsáveis</option>';
+
+  Array.from(selectCadastro.options)
+    .filter((option) => option.value)
+    .forEach((option) => {
+      const novaOption = document.createElement("option");
+      novaOption.value = option.textContent;
+      novaOption.textContent = option.textContent;
+      filtro.appendChild(novaOption);
+    });
+
+  if (valorAtual) filtro.value = valorAtual;
+}
+
+// ============================================================
+// Modal Responsáveis (iframe)
+// ============================================================
+
+/** Carrega o iframe somente após o modal estar totalmente visível (evita aria-hidden no foco) */
+document.getElementById("modalResponsaveis")?.addEventListener("shown.bs.modal", function () {
+  document.getElementById("iframeResponsaveis").src = "Front/responsaveis.html";
+});
+
+/** Limpa o src ao fechar para forçar reload na próxima abertura */
+document.getElementById("modalResponsaveis")?.addEventListener("hidden.bs.modal", function () {
+  document.getElementById("iframeResponsaveis").src = "";
+});
+
+/** Fecha o modal de responsáveis (chamado pelo iframe filho) */
+window.fecharModalResponsaveis = function () {
+  bootstrap.Modal.getInstance(document.getElementById("modalResponsaveis"))?.hide();
+};
+
+// ============================================================
+// Handlers públicos (chamados pelo HTML)
+// ============================================================
+
+/** Chamado ao mudar responsável ou status — apenas re-renderiza */
+window.filtrarTarefas = function () {
   atualizarUI();
 };
 
+/** Chamado ao mudar datas — re-busca na API */
+window.filtrarTarefasPorData = async function () {
+  await buscarTarefasDoBackend();
+};
+
+window.limparFiltros = function () {
+  document.getElementById("filtro-responsavel").value = "";
+  document.getElementById("filtro-status").value = "";
+  document.getElementById("filtro-data-inicial").value = hojeISO();
+  document.getElementById("filtro-data-final").value = amanhaISO();
+  buscarTarefasDoBackend();
+};
+
+/** Atualiza apenas o estado local (sem re-renderizar) */
+window.mudarStatus = function (id, novoStatus) {
+  app.tarefas[id].setStatus(novoStatus);
+};
+
+/** Persiste o status atual no backend e re-renderiza */
+window.salvarStatusNoBackend = async function (idBackend, indiceOriginal) {
+  if (!idBackend) {
+    alert("Esta tarefa não possui ID no backend e não pode ser salva.");
+    return;
+  }
+
+  const tarefa = app.tarefas[indiceOriginal];
+  const statusAPI = STATUS_PARA_API[tarefa.getStatus()] ?? tarefa.getStatus().toUpperCase();
+
+  const btn = document.getElementById(`btn-salvar-${indiceOriginal}`);
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+  }
+
+  try {
+    const response = await fetch(`${TAREFAS_ENDPOINT}/${idBackend}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ statusAtividade: statusAPI }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(montarErroBackend(errorBody, response.status));
+    }
+
+    // Feedback visual de sucesso
+    if (btn) {
+      btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+      btn.classList.replace("btn-outline-primary", "btn-success");
+      setTimeout(() => {
+        btn.innerHTML = '<i class="bi bi-floppy"></i>';
+        btn.classList.replace("btn-success", "btn-outline-primary");
+        btn.disabled = false;
+      }, 1500);
+    }
+
+    atualizarUI();
+  } catch (error) {
+    console.error("Erro ao salvar status:", error);
+    if (btn) {
+      btn.innerHTML = '<i class="bi bi-floppy"></i>';
+      btn.disabled = false;
+    }
+    alert(`Erro ao salvar status: ${error.message}`);
+  }
+};
+
+/** Exclui a tarefa no backend e remove da lista */
+window.excluirTarefa = async function (idBackend, indiceOriginal) {
+  if (!idBackend) {
+    alert("Esta tarefa não possui ID no backend e não pode ser excluída.");
+    return;
+  }
+
+  if (!confirm("Tem certeza que deseja excluir esta tarefa?")) return;
+
+  const btn = document.getElementById(`btn-excluir-${indiceOriginal}`);
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+  }
+
+  try {
+    const response = await fetch(`${TAREFAS_ENDPOINT}/${idBackend}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(montarErroBackend(errorBody, response.status));
+    }
+
+    // Remove do array local e re-renderiza
+    app.tarefas.splice(indiceOriginal, 1);
+    atualizarUI();
+  } catch (error) {
+    console.error("Erro ao excluir tarefa:", error);
+    if (btn) {
+      btn.innerHTML = '<i class="bi bi-trash"></i>';
+      btn.disabled = false;
+    }
+    alert(`Erro ao excluir tarefa: ${error.message}`);
+  }
+};
+
+// ============================================================
+// Inicialização
+// ============================================================
 carregarResponsaveisNoSelect();
+inicializarFiltrosData();
+buscarTarefasDoBackend();

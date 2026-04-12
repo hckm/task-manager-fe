@@ -33,13 +33,13 @@ class Tarefa {
 }
 
 class TaskFlowGerenciador {
-  constructor() {
-    this.tarefas = [];
-  }
+    constructor() {
+        this.tarefas = [];
+    }
 
-  adicionarTarefa(tarefa) {
-    this.tarefas.push(tarefa);
-  }
+    adicionarTarefa(tarefa) {
+        this.tarefas.push(tarefa);
+    }
 
   calcularProgresso() {
     const total = this.tarefas.length;
@@ -58,18 +58,24 @@ class TaskFlowGerenciador {
     return { total, concluidas, aFazer, andamento, percentual };
   }
 }
-
 // ============================================================
 // Constantes
 // ============================================================
 const app = new TaskFlowGerenciador();
-const API_BASE_URL = "http://localhost:8080";
-// const API_BASE_URL = "https://task-manager-api-g9-cef2b0a6ceg6b8dr.brazilsouth-01.azurewebsites.net"
+// const API_BASE_URL = "http://localhost:8080";
+const API_BASE_URL = "https://task-manager-api-g9-cef2b0a6ceg6b8dr.brazilsouth-01.azurewebsites.net"
 const TAREFAS_ENDPOINT = `${API_BASE_URL}/api/tarefas`;
 const FILTRAR_ENDPOINT = `${API_BASE_URL}/api/tarefas/filtrar`;
 const RESPONSAVEIS_ENDPOINT = `${API_BASE_URL}/api/responsaveis`;
 const STATUS_INICIAL_API = "AFAZER";
-const TAREFAS_PAGE_SIZE = 100;
+
+// ============================================================
+// Estado de paginação
+// ============================================================
+let tamanhoPagina  = 5;   // itens por página (alterável pelo usuário)
+let paginaAtual    = 0;
+let totalPaginas   = 0;
+let totalElementos = 0;
 
 // Mapa de normalização: valor da API → valor interno
 const STATUS_NORMALIZADO = {
@@ -162,23 +168,37 @@ function montarErroBackend(rawBody, status) {
 }
 
 // ============================================================
-// Busca de tarefas no backend (filtro por data)
+// Busca de tarefas no backend (filtro por data, responsável e status)
 // ============================================================
-async function buscarTarefasDoBackend() {
+async function buscarTarefasDoBackend(pagina = 0) {
   const dataInicial = document.getElementById("filtro-data-inicial")?.value || "";
-  const dataFinal = document.getElementById("filtro-data-final")?.value || "";
+  const dataFinal   = document.getElementById("filtro-data-final")?.value   || "";
 
   if (!dataInicial || !dataFinal) {
     renderizarListaVazia("Selecione um período para buscar as tarefas.");
     return;
   }
 
-  // dataInicial e dataFinal já estão em yyyy-MM-dd (vêm de input[type=date])
-  const url =
-    `${FILTRAR_ENDPOINT}` +
-    `?dataInicio=${dataInicial}` +
-    `&dataFim=${dataFinal}` +
-    `&page=0&size=${TAREFAS_PAGE_SIZE}`;
+  // Monta os query params — dataInicial/dataFinal em yyyy-MM-dd (input[type=date])
+  const params = new URLSearchParams({
+    dataInicio: dataInicial,
+    dataFim:    dataFinal,
+    page:       pagina,
+    size:       tamanhoPagina,
+  });
+
+  // Responsável — valor do select é o ID numérico
+  const responsavelId = document.getElementById("filtro-responsavel")?.value || "";
+  if (responsavelId) params.append("responsavelId", responsavelId);
+
+  // Status — converte o valor de exibição para o enum do backend
+  const statusDisplay = document.getElementById("filtro-status")?.value || "";
+  if (statusDisplay) {
+    const statusAPI = STATUS_PARA_API[statusDisplay] ?? statusDisplay;
+    params.append("statusAtividade", statusAPI);
+  }
+
+  const url = `${FILTRAR_ENDPOINT}?${params.toString()}`;
 
   mostrarCarregando();
 
@@ -190,10 +210,15 @@ async function buscarTarefasDoBackend() {
     }
 
     const data = await response.json();
-    const pageData = data?.content;               // Page<TarefaResponseDTO>
-    const itens = Array.isArray(pageData?.content) // array real de tarefas
+    const pageData = data?.content;
+    const itens = Array.isArray(pageData?.content)
       ? pageData.content
       : [];
+
+    // Armazena metadados de paginação vindos do Spring Page
+    paginaAtual    = pageData?.number       ?? 0;
+    totalPaginas   = pageData?.totalPages   ?? 0;
+    totalElementos = pageData?.totalElements ?? 0;
 
     // Mapeia resposta da API para objetos Tarefa
     app.tarefas = itens.map((item) => {
@@ -208,12 +233,10 @@ async function buscarTarefasDoBackend() {
       const statusBruto = String(item.statusAtividade ?? "").toUpperCase();
       const statusNorm = STATUS_NORMALIZADO[statusBruto] ?? "A Fazer";
 
-      // Backend retorna "dtCadastro" (ISO 8601). Usa como prazo de exibição
-      // enquanto o campo prazo não existir na resposta.
       const prazoISO = item.prazo
-        ? item.prazo.substring(0, 10)          // se vier no futuro, já em ISO
+        ? item.prazo.substring(0, 10)
         : item.dtCadastro
-          ? item.dtCadastro.substring(0, 10)   // "2026-04-09T21:08:19..." → "2026-04-09"
+          ? item.dtCadastro.substring(0, 10)
           : "";
 
       const t = new Tarefa(
@@ -363,10 +386,6 @@ function atualizarUI() {
   document.getElementById("andamentoTxt").innerText = metricas.andamento;
   document.getElementById("concluidasTxt").innerText = metricas.concluidas;
 
-  // Barra de progresso
-  document.getElementById("percentual-geral").innerText = `${metricas.percentual}%`;
-  document.getElementById("progress-bar-geral").style.width = `${metricas.percentual}%`;
-
   // Filtra por responsável e status (client-side — data já veio filtrada da API)
   const tarefasFiltradas = filtrarPorResponsavelEStatus();
 
@@ -375,6 +394,7 @@ function atualizarUI() {
 
   if (tarefasFiltradas.length === 0) {
     renderizarListaVazia("Nenhuma tarefa encontrada para os filtros selecionados.");
+    renderizarPaginacao();
     return;
   }
 
@@ -425,24 +445,118 @@ function atualizarUI() {
         </div>
       </div>`;
   });
+
+  renderizarPaginacao();
 }
 
 // ============================================================
-// Filtros client-side (responsável + status apenas)
-// Data já é filtrada pelo endpoint da API
+// Filtros — API já retorna os dados filtrados; apenas mapeia para a UI
 // ============================================================
 function filtrarPorResponsavelEStatus() {
-  const responsavel = document.getElementById("filtro-responsavel")?.value || "";
-  const status = document.getElementById("filtro-status")?.value || "";
-
-  return app.tarefas
-    .map((tarefa, indiceOriginal) => ({ tarefa, indiceOriginal }))
-    .filter(({ tarefa }) => {
-      if (responsavel && tarefa.responsavel.getNome() !== responsavel) return false;
-      if (status && tarefa.getStatus() !== status) return false;
-      return true;
-    });
+  return app.tarefas.map((tarefa, indiceOriginal) => ({ tarefa, indiceOriginal }));
 }
+
+// ============================================================
+// Paginação
+// ============================================================
+function renderizarPaginacao() {
+  const container = document.getElementById("paginacao");
+  if (!container) return;
+
+  // Oculta quando não há nenhum resultado
+  if (totalElementos === 0) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const inicio = paginaAtual * tamanhoPagina + 1;
+  const fim    = Math.min((paginaAtual + 1) * tamanhoPagina, totalElementos);
+
+  // ── Seletor de itens por página ──────────────────────────
+  const opcoesTamanho = [5, 10, 25, 50].map((v) =>
+    `<option value="${v}" ${v === tamanhoPagina ? "selected" : ""}>${v}</option>`
+  ).join("");
+
+  const seletorTamanho = `
+    <div class="d-flex align-items-center gap-2 pagination-size-wrap">
+      <small class="text-muted text-nowrap">Itens por página:</small>
+      <select class="form-select form-select-sm pagination-size-select"
+              onchange="alterarTamanhoPagina(Number(this.value))"
+              aria-label="Itens por página">
+        ${opcoesTamanho}
+      </select>
+    </div>`;
+
+  // ── Info ─────────────────────────────────────────────────
+  const info = `
+    <small class="pagination-info text-muted text-nowrap">
+      Exibindo <strong>${inicio}–${fim}</strong> de <strong>${totalElementos}</strong> tarefa(s)
+    </small>`;
+
+  // ── Botões de navegação (só quando há mais de 1 página) ──
+  let botoesPaginacao = "";
+  if (totalPaginas > 1) {
+    // Monta array de índices a exibir (primeira, última, atual ±2)
+    const indices = new Set();
+    for (let i = 0; i < totalPaginas; i++) {
+      if (i === 0 || i === totalPaginas - 1 || Math.abs(i - paginaAtual) <= 2) {
+        indices.add(i);
+      }
+    }
+    const paginasOrdenadas = [...indices].sort((a, b) => a - b);
+
+    const itens = [];
+    paginasOrdenadas.forEach((p, idx) => {
+      if (idx > 0 && p - paginasOrdenadas[idx - 1] > 1) itens.push("...");
+      itens.push(p);
+    });
+
+    const botoesPaginas = itens.map((p) => {
+      if (p === "...") {
+        return `<li class="page-item disabled"><span class="page-link page-ellipsis">…</span></li>`;
+      }
+      const ativo = p === paginaAtual ? "active" : "";
+      return `
+        <li class="page-item ${ativo}">
+          <button class="page-link" onclick="irParaPagina(${p})">${p + 1}</button>
+        </li>`;
+    }).join("");
+
+    botoesPaginacao = `
+      <ul class="pagination pagination-sm mb-0">
+        <li class="page-item ${paginaAtual === 0 ? "disabled" : ""}">
+          <button class="page-link" onclick="irParaPagina(${paginaAtual - 1})" aria-label="Anterior">
+            <i class="bi bi-chevron-left"></i>
+          </button>
+        </li>
+        ${botoesPaginas}
+        <li class="page-item ${paginaAtual >= totalPaginas - 1 ? "disabled" : ""}">
+          <button class="page-link" onclick="irParaPagina(${paginaAtual + 1})" aria-label="Próximo">
+            <i class="bi bi-chevron-right"></i>
+          </button>
+        </li>
+      </ul>`;
+  }
+
+  container.innerHTML = `
+    <nav class="pagination-nav" aria-label="Paginação de tarefas">
+      ${seletorTamanho}
+      ${info}
+      ${botoesPaginacao}
+    </nav>`;
+}
+
+/** Navega para a página indicada */
+window.irParaPagina = function (pagina) {
+  if (pagina < 0 || pagina >= totalPaginas) return;
+  buscarTarefasDoBackend(pagina);
+};
+
+/** Altera o tamanho de página e volta para a página 0 */
+window.alterarTamanhoPagina = function (novoTamanho) {
+  tamanhoPagina = novoTamanho;
+  buscarTarefasDoBackend(0);
+};
 
 function atualizarFiltroResponsaveis() {
   const filtro = document.getElementById("filtro-responsavel");
@@ -456,7 +570,7 @@ function atualizarFiltroResponsaveis() {
     .filter((option) => option.value)
     .forEach((option) => {
       const novaOption = document.createElement("option");
-      novaOption.value = option.textContent;
+      novaOption.value = option.value;          // ID numérico (enviado para a API)
       novaOption.textContent = option.textContent;
       filtro.appendChild(novaOption);
     });
@@ -487,9 +601,9 @@ window.fecharModalResponsaveis = function () {
 // Handlers públicos (chamados pelo HTML)
 // ============================================================
 
-/** Chamado ao mudar responsável ou status — apenas re-renderiza */
-window.filtrarTarefas = function () {
-  atualizarUI();
+/** Chamado ao mudar responsável ou status — re-busca na API com os novos filtros */
+window.filtrarTarefas = async function () {
+  await buscarTarefasDoBackend();
 };
 
 /** Chamado ao mudar datas — re-busca na API */

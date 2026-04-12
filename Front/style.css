@@ -94,6 +94,7 @@ body {
   border: 1px solid #dce8ff;
   background: linear-gradient(160deg, #f8fbff 0%, #f1f6ff 100%);
   border-radius: 14px !important;
+  overflow: hidden; /* impede que qualquer filho extravase o fundo azul */
 }
 
 .filter-divider {
@@ -157,10 +158,13 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  width: 100%;          /* garante que ocupa toda a coluna pai */
+  min-width: 0;         /* permite que o flex container comprima */
 }
 
 .filter-period-group .input-group {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;         /* permite que cada input-group comprima */
 }
 
 .filter-period-arrow {
@@ -184,6 +188,7 @@ body {
   border-color: #d0dff7;
   border-radius: 0 10px 10px 0 !important;
   min-height: 42px;
+  min-width: 0;         /* permite que o input comprima dentro do flex */
   background-color: #fff;
   transition: var(--transicao);
 }
@@ -197,13 +202,142 @@ body {
   box-shadow: 0 0 0 0.15rem rgba(13, 99, 253, 0.18);
 }
 
-@media (max-width: 767.98px) {
+/* Task-card action row: permite quebrar em telas muito pequenas */
+.task-card .d-flex.mt-3 {
+  flex-wrap: wrap;
+}
+
+/* ===========================
+   Paginação
+   =========================== */
+
+.pagination-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  background: #fff;
+  border: 1px solid #dce8ff;
+  border-radius: 12px;
+  padding: 0.6rem 1rem;
+}
+
+.pagination-info {
+  font-size: 0.82rem;
+}
+
+/* Seletor de itens por página */
+.pagination-size-wrap { gap: 0.4rem; }
+
+.pagination-size-select {
+  width: auto !important;
+  min-width: 64px;
+  border-color: #d0dff7;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: #0d63fd;
+  padding: 0.2rem 1.6rem 0.2rem 0.5rem;
+  cursor: pointer;
+  transition: var(--transicao);
+}
+
+.pagination-size-select:focus {
+  border-color: #0d63fd;
+  box-shadow: 0 0 0 0.15rem rgba(13, 99, 253, 0.18);
+}
+
+.pagination .page-link {
+  border-radius: 8px !important;
+  margin: 0 2px;
+  border-color: #d0dff7;
+  color: #0d63fd;
+  min-width: 34px;
+  text-align: center;
+  transition: var(--transicao);
+}
+
+.pagination .page-link:hover {
+  background-color: #eef4ff;
+  border-color: #9ec0ff;
+  color: #0d63fd;
+}
+
+.pagination .page-item.active .page-link {
+  background-color: #0d63fd;
+  border-color: #0d63fd;
+  color: #fff;
+  font-weight: 700;
+}
+
+.pagination .page-item.disabled .page-link {
+  color: #adb5bd;
+  border-color: #e9ecef;
+  background: #f8f9fa;
+}
+
+.page-ellipsis {
+  pointer-events: none;
+  color: #adb5bd !important;
+  border-color: transparent !important;
+  background: transparent !important;
+}
+
+@media (max-width: 575.98px) {
+  .pagination-nav {
+    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .pagination-size-wrap { justify-content: center; }
+}
+
+/* ===========================
+   Responsividade
+   =========================== */
+
+/* ≤ 575px  (xs — celulares) */
+@media (max-width: 575.98px) {
+  /* Cabeçalho compacto */
+  header h1 { font-size: 2rem; }
+
+  /* Padding global menor */
+  .container-xl { padding-left: 0.75rem; padding-right: 0.75rem; }
+
+  /* Cards de tarefa — menos padding lateral */
+  .task-card { padding: 0.85rem 1rem !important; }
+
+  /* Filtro — período empilhado */
   .filter-period-group {
     flex-direction: column;
     align-items: stretch;
   }
-  .filter-period-arrow {
-    text-align: center;
+  .filter-period-arrow { text-align: center; }
+
+}
+
+/* 576 – 767px  (sm — celulares grandes / landscape) */
+@media (max-width: 767.98px) {
+  /* Filtro de período empilhado */
+  .filter-period-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .filter-period-arrow { text-align: center; }
+
+  /* Ações do task-card: select cresce, botões à direita */
+  .task-card .d-flex.mt-3 {
+    gap: 0.4rem;
+  }
+  .task-card .form-select.w-auto {
+    flex: 1;
+    min-width: 0;
   }
 }
 
+/* 768 – 991px  (md — tablets) */
+@media (max-width: 991.98px) {
+  /* Formulário e lista empilhados: dá espaço ao formulário */
+  .card-animation.card { padding: 1rem !important; }
+}

@@ -12,20 +12,22 @@
     <link rel="stylesheet" href="Front/style.css" />
   </head>
   <body>
-    <!--Cabeçalho-->
-    <div class="container py-5">
-      <header class="text-center mb-5">
-        <h1 class="display-4 fw-bold text-primary">TaskFlow</h1>
-        <p class="text-secondary">Gerenciamento de Tarefas em Equipe</p>
+    <div class="container-xl px-3 px-md-4 py-3 py-md-5">
+      <!-- Cabeçalho -->
+      <header class="text-center mb-4 mb-md-5">
+        <h1 class="display-5 display-md-4 fw-bold text-primary">TaskFlow</h1>
+        <p class="text-secondary mb-0">Gerenciamento de Tarefas em Equipe</p>
       </header>
-      <!--Registro de Tarefa-->
+
+      <!-- Layout principal -->
       <div class="row g-4">
-        <div class="col-md-4">
+        <!-- Coluna formulário -->
+        <div class="col-12 col-lg-4">
           <div class="card p-4 shadow-sm card-animation">
             <h4 class="mb-3">Nova Tarefa</h4>
             <form id="taskForm">
               <div class="mb-3">
-                <label>Título da Tarefa</label>
+                <label class="form-label">Título da Tarefa</label>
                 <input
                   type="text"
                   id="titulo"
@@ -35,7 +37,7 @@
                 />
               </div>
               <div class="mb-3">
-                <label>Descrição</label>
+                <label class="form-label">Descrição</label>
                 <textarea
                   id="descricao"
                   class="form-control"
@@ -44,9 +46,9 @@
                   required
                 ></textarea>
               </div>
-              <div class="row">
+              <div class="row g-2 mb-3">
                 <div class="col-6">
-                  <label>Prioridade</label>
+                  <label class="form-label">Prioridade</label>
                   <select id="prioridade" class="form-select">
                     <option value="" disabled selected>Escolher</option>
                     <option value="ALTA">Alta</option>
@@ -55,12 +57,12 @@
                   </select>
                 </div>
                 <div class="col-6">
-                  <label>Prazo</label>
+                  <label class="form-label">Prazo</label>
                   <input type="date" id="prazo" class="form-control" required />
                 </div>
               </div>
-              <div class="mb-3 mt-3">
-                <label>Responsável</label>
+              <div class="mb-3">
+                <label class="form-label">Responsável</label>
                 <select id="responsavel" class="form-select" required>
                   <option value="" disabled selected>Escolher</option>
                 </select>
@@ -75,70 +77,55 @@
             data-bs-toggle="modal"
             data-bs-target="#modalResponsaveis"
           >
-            Cadastrar Novo Usuário
+            <i class="bi bi-person-plus me-1"></i>Cadastrar Novo Usuário
           </button>
         </div>
-        <!--Filtragem de Status-->
-        <div class="col-md-8">
+
+        <!-- Coluna lista/dashboard -->
+        <div class="col-12 col-lg-8">
+          <!-- Cards de métricas — 2 por linha em xs, 4 em sm+ -->
           <div class="row g-3 mb-4">
-            <div class="col-sm-3">
+            <div class="col-6 col-sm-3">
               <div class="dashboard-card card p-2 text-center border-total">
                 <h6 class="text-muted small">Total</h6>
-                <h3 id="totalTxt" class="fw-bold text-primary">0</h3>
+                <h3 id="totalTxt" class="fw-bold text-primary mb-0">0</h3>
               </div>
             </div>
-            <div class="col-sm-3">
+            <div class="col-6 col-sm-3">
               <div class="dashboard-card card p-2 text-center border-fazer">
                 <h6 class="text-muted small">A Fazer</h6>
-                <h3 id="afazerTxt" class="fw-bold text-secondary">0</h3>
+                <h3 id="afazerTxt" class="fw-bold text-secondary mb-0">0</h3>
               </div>
             </div>
-            <div class="col-sm-3">
+            <div class="col-6 col-sm-3">
               <div class="dashboard-card card p-2 text-center border-andamento">
                 <h6 class="text-muted small">Em Andamento</h6>
-                <h3 id="andamentoTxt" class="fw-bold text-warning">0</h3>
+                <h3 id="andamentoTxt" class="fw-bold text-warning mb-0">0</h3>
               </div>
             </div>
-            <div class="col-sm-3">
+            <div class="col-6 col-sm-3">
               <div class="dashboard-card card p-2 text-center border-concluida">
                 <h6 class="text-muted small">Concluídas</h6>
-                <h3 id="concluidasTxt" class="fw-bold text-success">0</h3>
+                <h3 id="concluidasTxt" class="fw-bold text-success mb-0">0</h3>
               </div>
             </div>
           </div>
-          <!--Progesso em Porcentagem-->
-          <div class="card p-4 mb-4 card-animation">
-            <div class="d-flex justify-content-between mb-2">
-              <span class="fw-bold">Progresso Geral do Projeto</span>
-              <span id="percentual-geral" class="fw-bold text-success">0%</span>
-            </div>
-            <div class="progress">
-              <div
-                id="progress-bar-geral"
-                class="progress-bar bg-success"
-                style="width: 0%"
-              ></div>
-            </div>
-          </div>
-          <!--Filtros -> Responsáveis - Status - Período - Limpar-->
-          <div class="card p-4 mb-3 card-animation filter-card">
 
+          <!-- Filtros -->
+          <div class="card p-3 p-md-4 mb-3 card-animation filter-card">
             <!-- Cabeçalho do filtro -->
-            <div class="d-flex align-items-center justify-content-between mb-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
               <div class="d-flex align-items-center gap-2">
                 <div class="filter-icon-wrap">
                   <i class="bi bi-funnel-fill"></i>
                 </div>
                 <div>
                   <h6 class="mb-0 fw-bold">Filtros</h6>
-                  <small class="text-muted">Refine por responsável, status ou período</small>
+                  <small class="text-muted d-none d-sm-block">Refine por responsável, status ou período</small>
                 </div>
               </div>
-              <button
-                onclick="limparFiltros()"
-                class="btn btn-sm btn-outline-primary btn-animation filter-clear-btn"
-              >
-                <i class="bi bi-x-circle me-1"></i>Limpar filtros
+              <button onclick="limparFiltros()" class="btn btn-sm btn-outline-primary btn-animation filter-clear-btn">
+                <i class="bi bi-x-circle me-1"></i>Limpar
               </button>
             </div>
 
@@ -147,28 +134,21 @@
             <!-- Controles de filtro -->
             <div class="row g-3 align-items-end">
 
-              <div class="col-12 col-md-4">
+              <!-- Linha 1: Responsável + Status -->
+              <div class="col-12 col-sm-6">
                 <label for="filtro-responsavel" class="filter-label">
                   <i class="bi bi-person me-1"></i>Responsável
                 </label>
-                <select
-                  id="filtro-responsavel"
-                  class="form-select filter-control"
-                  onchange="filtrarTarefas()"
-                >
+                <select id="filtro-responsavel" class="form-select filter-control" onchange="filtrarTarefas()">
                   <option value="">Todos os responsáveis</option>
                 </select>
               </div>
 
-              <div class="col-12 col-md-3">
+              <div class="col-12 col-sm-6">
                 <label for="filtro-status" class="filter-label">
                   <i class="bi bi-tag me-1"></i>Status
                 </label>
-                <select
-                  id="filtro-status"
-                  class="form-select filter-control"
-                  onchange="filtrarTarefas()"
-                >
+                <select id="filtro-status" class="form-select filter-control" onchange="filtrarTarefas()">
                   <option value="">Todos os status</option>
                   <option value="A Fazer">A Fazer</option>
                   <option value="Em Andamento">Em Andamento</option>
@@ -176,7 +156,8 @@
                 </select>
               </div>
 
-              <div class="col-12 col-md-5">
+              <!-- Linha 2: Período (sempre largura total) -->
+              <div class="col-12">
                 <label class="filter-label">
                   <i class="bi bi-calendar-range me-1"></i>Período
                 </label>
@@ -207,14 +188,20 @@
 
             </div>
           </div>
+
+          <!-- Paginação -->
+          <div id="paginacao" class="mb-3"></div>
+
+          <!-- Lista de tarefas -->
           <div id="listaTarefas" class="row g-3"></div>
         </div>
       </div>
     </div>
+
     <!-- Modal Responsáveis (iframe) -->
     <div class="modal fade" id="modalResponsaveis" tabindex="-1" aria-labelledby="modalResponsaveisLabel" aria-hidden="true">
-      <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content overflow-hidden" style="height: 560px;">
+      <div class="modal-dialog modal-lg modal-dialog-centered modal-fullscreen-md-down">
+        <div class="modal-content overflow-hidden" style="height: 580px; max-height: 92dvh;">
           <iframe
             id="iframeResponsaveis"
             src=""
